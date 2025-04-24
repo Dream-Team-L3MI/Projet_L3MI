@@ -3,16 +3,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Unit import u_V , u_s, u_ms, u_kOhm, u_uF, u_mH, u_us
-# ساخت مدار
+
+
 circuit = Circuit('RLC Series DC Circuit')
 
-# تعریف عناصر مدار
 V_in = 10 @ u_V
 R = 1 @ u_kOhm
 L = 1 @ u_mH
 C = 1 @ u_uF
 
-# تعریف اجزا
 circuit.V('input', 'in', circuit.gnd, V_in)
 circuit.R(1, 'in', 'n1', R)
 circuit.L(1, 'n1', 'n2', L)
