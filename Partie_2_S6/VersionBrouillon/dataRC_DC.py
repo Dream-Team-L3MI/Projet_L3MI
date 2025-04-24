@@ -1,6 +1,6 @@
 import csv
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import *
+from PySpice.Unit import u_V , u_s, u_ms, u_Ohm, u_uF, u_F
 
 def simulate_rc_dc(R_value, C_value, Vin=5.0):
     """
