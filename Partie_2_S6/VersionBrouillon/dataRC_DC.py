@@ -11,6 +11,7 @@ from PySpice.Unit import u_V, u_Ohm, u_F
 
 import matplotlib.pyplot as plt
 
+# faire varier la tension input
 def simulate_rc_dc(R_value, C_value, Vin=5.0):
     """
     Simulates an RC circuit in DC regime (steady-state) using PySpice.
