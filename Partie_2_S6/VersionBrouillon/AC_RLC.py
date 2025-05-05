@@ -1,46 +1,40 @@
-import csv
 import numpy as np
+import csv
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import u_V, u_Ohm, u_F, u_H, u_Hz
+from PySpice.Probe.Plot import plot
+from PySpice.Spice.Library import SpiceLibrary
+from PySpice.Spice.Simulation import ACAnalysis
+from PySpice.Unit import *
+from PySpice.Logging.Logging import setup_logging
+from PySpice.Unit import u_V , u_s, u_ms, u_Ohm, u_F, u_Hz, u_H
 
-filename = 'AC_RLC_results.csv'
-with open(filename, mode='w', newline='') as file:
+setup_logging()
+
+frequencies = np.logspace(1, 6, num=100)  # فرکانس از 10Hz تا 1MHz
+results = []
+
+for R in [1, 10, 100, 100]:  # مقاومت‌ها از 1 تا 1000 اهم
+    for C in [1e-3, 1e-1, 1]:  # ظرفیت از 1 میکروفاراد تا 1 فاراد
+        for V in [1, 5, 10]:   # ولتاژ ورودی از 1 تا 10 ولت
+
+            circuit = Circuit('AC Analysis of RLC Circuit')
+            circuit.SinusoidalVoltageSource('input', 'vin', circuit.gnd, amplitude=V@u_V)
+            circuit.R(1, 'vin', 'n1', R@u_Ohm)
+            circuit.L(1, 'n1', 'n2', 1@u_H)
+            circuit.C(1, 'n2', circuit.gnd, C@u_F)
+
+            simulator = circuit.simulator(temperature=25, nominal_temperature=25)
+            analysis = simulator.ac(start_frequency=frequencies[0]@u_Hz,
+                                     stop_frequency=frequencies[-1]@u_Hz,
+                                     number_of_points=len(frequencies),
+                                     variation='dec')
+
+            for f, v in zip(analysis.frequency, analysis['vin']):
+                results.append([float(f), R, C, V, abs(v)])
+
+# نوشتن در فایل CSV
+with open('ac_rlc_results.csv', 'w', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(['R', 'L', 'C', 'V_in', 'V_R', 'V_L', 'V_C', 'temps', 'frequence', 'gain'])
+    writer.writerow(['Frequency (Hz)', 'R (Ohm)', 'C (F)', 'Vin (V)', 'Magnitude of Vin'])
+    writer.writerows(results)
 
-    for V in np.linspace(1, 10, 10):  # V_in amplitude
-        for R in np.linspace(1, 1000, 10):
-            for L in np.linspace(1e-6, 1e-3, 10):
-                for C in np.linspace(1e-9, 1e-6, 10):
-                    circuit = Circuit('RLC Circuit AC')
-                    circuit.SinusoidalVoltageSource(1, 'input', circuit.gnd, amplitude=V@u_V)
-                    circuit.R(1, 'input', 'n1', R@u_Ohm)
-                    circuit.L(1, 'n1', 'n2', L@u_H)
-                    circuit.C(1, 'n2', circuit.gnd, C@u_F)
-
-                    simulator = circuit.simulator()
-                    try:
-                        # Run AC analysis with frequency sweep
-                        analysis = simulator.ac(start_frequency=1@u_Hz,
-                                                 stop_frequency=1e6@u_Hz,
-                                                 number_of_points=100,
-                                                 variation='log')
-                        
-                        # We are interested in values at the first frequency point
-                        frequence = float(analysis.frequency[0])  # frequency
-                        V_in = V  # input voltage
-                        V_R = abs(analysis['input'][0] - analysis['n1'][0])  # Voltage across resistor
-                        V_L = abs(analysis['n1'][0] - analysis['n2'][0])  # Voltage across inductor
-                        V_C = abs(analysis['n2'][0])  # Voltage across capacitor
-
-                        # Gain calculation
-                        gain = 20 * np.log10(V_C / V_in) if V_in != 0 else None
-
-                        # Calculating the time period (temps) from the frequency
-                        temps = 1 / frequence if frequence != 0 else None
-
-                        # Write values to CSV
-                        writer.writerow([R, L, C, V_in, V_R, V_L, V_C, temps, frequence, gain])
-                    except Exception as e:
-                        # In case of error, write None values
-                        writer.writerow([R, L, C, V, None, None, None, None, None, None])
