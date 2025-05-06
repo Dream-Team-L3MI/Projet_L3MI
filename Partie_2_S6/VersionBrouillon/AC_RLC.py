@@ -43,22 +43,32 @@ for R in R_values:
                     V_R = abs(analysis['in'] - analysis['n1'])[f_index]
                     V_L = abs(analysis['n1'] - analysis['n2'])[f_index]
                     V_C = abs(analysis['n2'])[f_index]
+                    gain_bas = V_C/V_amp
+                    gain_haut = V_L/V_amp
+                    gain_bande= V_R/V_amp
 
                     results.append({
-                        'Frequency_Hz': freq,
+                        'R': R,
+                        'L': float(L),
+                        'C': float(C),
+
+                        'V_amp': V_amp,
+
                         'V_R': V_R,
                         'V_L': V_L,
                         'V_C': V_C,
-                        'R_Ohm': R,
-                        'L_H': float(L),
-                        'C_F': float(C),
-                        'V_amp': V_amp
+
+                        'Frequency_Hz': freq,
+
+                        'gain_bas': gain_bas,
+                        'gain_haut': gain_haut,
+                        'gain_bande': gain_bande
                     })
 
 # Save results to CSV
 df = pd.DataFrame(results)
-df.to_csv('output_rlc.csv', index=False)
+df.to_csv('AC_RLC.csv', index=False)
 
-print("Simulation complete! Results saved to 'output_rlc.csv'")
+print("Simulation complete! Results saved to 'AC_RLC.csv'")
 
 
