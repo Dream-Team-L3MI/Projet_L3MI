@@ -50,20 +50,18 @@ def simulate_rc_dc(params):
         analysis = sim.operating_point()
 
         # Lecture des tensions
-        V_in  = float(analysis.nodes['vin'])
+        Vin  = float(analysis.nodes['vin'])
         V_out = float(analysis.nodes['vout'])
-        V_R   = V_in - V_out      # tension aux bornes de la résistance
+        V_R   = Vin - V_out      # tension aux bornes de la résistance
         V_C   = V_out             # tension aux bornes du condensateur (vs gnd)
 
         return {
             'R':    R_value,
             'C':    C_value,
             'Vin':  Vin,
-            'V_in':  V_in,
             'V_out': V_out,
             'V_R':   V_R,
-            'V_C':   V_C,
-            'error': ''
+            'V_C':   V_C
         }
 
     except Exception as e:
@@ -71,12 +69,10 @@ def simulate_rc_dc(params):
         return {
             'R':    R_value,
             'C':    C_value,
-            'Vin':  Vin,
-            'V_in':  None,
+            'Vin':  None,
             'V_out': None,
             'V_R':   None,
             'V_C':   None,
-            'error': str(e)
         }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -88,8 +84,8 @@ if __name__ == "__main__":
     total = len(param_grid)
     print(f"🔄 Lancement de {total:,} simulations RC en parallèle...")
 
-    output_file = "rc_dataset_1M.csv"
-    fieldnames = ['R', 'C', 'Vin', 'V_in', 'V_out', 'V_R', 'V_C', 'error']
+    output_file = "rc_dataset_2000.csv"
+    fieldnames = ['R', 'C', 'Vin' , 'V_out', 'V_R', 'V_C' ]
 
     # 3.2) Ouvrir le CSV et écrire l'en-tête
     with open(output_file, "w", newline="") as f:
@@ -103,4 +99,4 @@ if __name__ == "__main__":
                                total=total, desc="Simulations"):
                 writer.writerow(result)
 
-    print(f"✅ 100 000 simulations terminées. Données enregistrées dans '{output_file}'.")
+    print(f"✅ 2 000 simulations terminées. Données enregistrées dans '{output_file}'.")
