@@ -21,7 +21,7 @@ from tqdm import tqdm
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Génération de la grille de paramètres
 # ─────────────────────────────────────────────────────────────────────────────
-def generate_full_parameter_grid(r_count=100, c_count=100, vin_count=100):
+def generate_full_parameter_grid(r_count=10, c_count=10, vin_count=20):
     """
     Retourne la liste de tous les tuples (R, C, Vin) formant
     un produit cartésien de tailles r_count × c_count × vin_count.
@@ -84,7 +84,7 @@ def simulate_rc_dc(params):
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # 3.1) Générer la grille complète (100×100×100 = 1 000 000 combinaisons)
-    param_grid = generate_full_parameter_grid(100, 100, 50)
+    param_grid = generate_full_parameter_grid(10, 10, 20)
     total = len(param_grid)
     print(f"🔄 Lancement de {total:,} simulations RC en parallèle...")
 
