@@ -8,20 +8,10 @@ from PySpice.Unit import u_V, u_Ohm, u_F
 import multiprocessing
 from tqdm import tqdm
 
-# simulate_rc_parallel.py
-
-import csv
-import numpy as np
-from itertools import product
-from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import u_V, u_Ohm, u_F
-import multiprocessing
-from tqdm import tqdm
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Génération de la grille de paramètres
 # ─────────────────────────────────────────────────────────────────────────────
-def generate_full_parameter_grid(r_count=10, c_count=10, vin_count=20):
+def generate_parameter_grid(r_count, c_count, vin_count):
     """
     Retourne la liste de tous les tuples (R, C, Vin) formant
     un produit cartésien de tailles r_count × c_count × vin_count.
@@ -43,14 +33,14 @@ def simulate_rc_dc(params):
     try:
         # Construction du circuit
         circuit = Circuit(f'RC R={R_value:.1f}Ω C={C_value:.1e}F Vin={Vin:.1f}V')
-        circuit.V(1, 'vin', circuit.gnd, Vin @ u_V)
-        circuit.R(1, 'vin', 'vout', R_value @ u_Ohm)
+        circuit.V(1, 'input', circuit.gnd, Vin @ u_V)
+        circuit.R(1, 'input', 'vout', R_value @ u_Ohm)
         circuit.C(1, 'vout', circuit.gnd, C_value @ u_F)
-        sim      = circuit.simulator()
-        analysis = sim.operating_point()
+        simulateur = circuit.simulator()
+        analysis = simulateur.operating_point()
 
         # Lecture des tensions
-        Vin  = float(analysis.nodes['vin'])
+        Vin  = float(analysis.nodes['input'])
         V_out = float(analysis.nodes['vout'])
         V_R   = Vin - V_out      # tension aux bornes de la résistance
         V_C   = V_out             # tension aux bornes du condensateur (vs gnd)
@@ -80,7 +70,7 @@ def simulate_rc_dc(params):
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # 3.1) Générer la grille complète (100×100×100 = 1 000 000 combinaisons)
-    param_grid = generate_full_parameter_grid(10, 10, 20)
+    param_grid = generate_parameter_grid(10, 10, 20)
     total = len(param_grid)
     print(f"🔄 Lancement de {total:,} simulations RC en parallèle...")
 
@@ -92,7 +82,7 @@ if __name__ == "__main__":
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
-        # 3.3) Créer la pool de processus
+        # 3.3) Créer la pool de processuscs
         with multiprocessing.Pool() as pool:
             # Utilisation de imap_unordered pour écrire les résultats dès qu'ils sont prêts
             for result in tqdm(pool.imap_unordered(simulate_rc_dc, param_grid, chunksize=100),
