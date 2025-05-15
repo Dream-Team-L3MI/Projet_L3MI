@@ -15,5 +15,3 @@ Dans les scripts python :
 	data_dir = os.getenv("DATA_DIR")
 	epochs = int(os.getenv("DEFAULT_EPOCHS"))
 	lr = float(os.getenv("LEARNING_RATE")) 
-
-
