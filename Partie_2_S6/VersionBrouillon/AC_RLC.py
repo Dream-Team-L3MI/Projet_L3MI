@@ -1,76 +1,114 @@
-import numpy as np
-import pandas as pd
-import multiprocessing
+import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import u_V, u_H, u_F, u_Ohm, u_Hz
-from PySpice.Logging.Logging import setup_logging
+from PySpice.Unit import u_V, u_Ohm, u_Hz, u_H, u_F
+import numpy as np
+import cmath
+import csv
+from itertools import product
+import multiprocessing
+from tqdm import tqdm
+import os
+import signal
+import sys
 
-logger = setup_logging()
+# Configuration
+logger = Logging.setup_logging()
+os.environ['PYSPICE_SIMULATION_TEMP_DIR'] = os.path.join(os.getcwd(), 'tmp')
 
-# Parameter bounds
-R_bounds = (1, 1000)             # Ohms
-L_bounds = (0.001, 0.1)          # Henries
-C_bounds = (1e-9, 1e-6)          # Farads
-V_bounds = (1, 10)               # Volts
-f_bounds = (10, 10000)           # Hz
+def signal_handler(sig, frame):
+    print("\nArr\u00eat propre en cours...")
+    sys.exit(0)
 
-def simulate_batch(batch_combos):
-    results = []
-    for R, L, C, V_in, freq in batch_combos:
-        circuit = Circuit("RLC Series")
-        circuit.SinusoidalVoltageSource('input', 'in', circuit.gnd,
-                                        amplitude=V_in @ u_V,
-                                        frequency=freq @ u_Hz)
-        circuit.R(1, 'in', 'n1', R @ u_Ohm)
+signal.signal(signal.SIGINT, signal_handler)
+
+def simulate_rlc_ac(params):
+    """Simulation d'un circuit RLC en r\u00e9gime AC"""
+    R, L, C, Vin, freq = params
+    try:
+        circuit = Circuit('RLC Series Circuit')
+        circuit.SinusoidalVoltageSource(1, 'vin', circuit.gnd, amplitude=Vin, frequency=freq)
+        circuit.R(1, 'vin', 'n1', R @ u_Ohm)
         circuit.L(1, 'n1', 'n2', L @ u_H)
         circuit.C(1, 'n2', circuit.gnd, C @ u_F)
 
-        simulator = circuit.simulator()
-        try:
-            analysis = simulator.ac(start_frequency=freq @ u_Hz,
-                                    stop_frequency=freq @ u_Hz,
-                                    number_of_points=1, variation='dec')
-            V_R = abs(analysis['in'] - analysis['n1'])[0]
-            V_L = abs(analysis['n1'] - analysis['n2'])[0]
-            V_C = abs(analysis['n2'])[0]
+        simulator = circuit.simulator(temperature=25, nominal_temperature=25)
+        analysis = simulator.ac(start_frequency=freq, stop_frequency=freq, number_of_points=1, variation='lin')
 
-            gain_bas = V_C / V_in
-            gain_haut = V_L / V_in
-            gain_bande = V_R / V_in
+        vin = complex(analysis['vin'][0])
+        vn1 = complex(analysis['n1'][0])
+        vn2 = complex(analysis['n2'][0])
 
-            results.append([R, L, C, V_in, V_R, V_L, V_C, freq,
-                            gain_bas, gain_haut, gain_bande])
-        except Exception:
-            continue
-    return results
+        V_R = vin - vn1
+        V_L = vn1 - vn2
+        V_C = vn2
 
-def run_simulation(n_total=1_000_000, n_processes=4):
-    np.random.seed(42)
-    R_vals = np.random.uniform(*R_bounds, n_total)
-    L_vals = np.random.uniform(*L_bounds, n_total)
-    C_vals = np.random.uniform(*C_bounds, n_total)
-    V_vals = np.random.uniform(*V_bounds, n_total)
-    F_vals = np.random.uniform(*f_bounds, n_total)
+        gain_bas = abs(V_C) / abs(vin)
+        gain_haut = abs(V_L) / abs(vin)
+        gain_bande = abs(V_R) / abs(vin)
 
-    combos = list(zip(R_vals, L_vals, C_vals, V_vals, F_vals))
+        return {
+            'R': float(R),
+            'L': float(L),
+            'C': float(C),
+            'V_in': float(Vin),
+            'Frequency_Hz': float(freq),
+            'V_R': float(abs(V_R)),
+            'V_L': float(abs(V_L)),
+            'V_C': float(abs(V_C)),
+            'gain_bas': float(gain_bas),
+            'gain_haut': float(gain_haut),
+            'gain_bande': float(gain_bande),
+            'phase_V_R_rad': float(cmath.phase(V_R)),
+            'phase_V_L_rad': float(cmath.phase(V_L)),
+            'phase_V_C_rad': float(cmath.phase(V_C))
+        }
+    except Exception:
+        return None
 
-    # Divide into chunks
-    chunk_size = n_total // n_processes
-    chunks = [combos[i * chunk_size: (i + 1) * chunk_size if i != n_processes - 1 else n_total]
-              for i in range(n_processes)]
-
-    with multiprocessing.Pool(n_processes) as pool:
-        all_results = pool.map(simulate_batch, chunks)
-
-    flat_results = [row for batch in all_results for row in batch]
-    df = pd.DataFrame(flat_results, columns=[
-        'R', 'L', 'C', 'V_in', 'V_R', 'V_L', 'V_C', 'frequency',
-        'gain_bas', 'gain_haut', 'gain_bande'
-    ])
-    df.to_csv('AC_RLC_ML_dataset.csv', index=False)
-    print("✅ Simulation complete. Results saved to 'AC_RLC_ML_dataset.csv'.")
+def writer_worker(output_file, queue):
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'R', 'L', 'C', 'V_in', 'Frequency_Hz',
+            'V_R', 'V_L', 'V_C',
+            'gain_bas', 'gain_haut', 'gain_bande',
+            'phase_V_R_rad', 'phase_V_L_rad', 'phase_V_C_rad'
+        ])
+        writer.writeheader()
+        while True:
+            result = queue.get()
+            if result == 'STOP':
+                break
+            writer.writerow(result)
+            f.flush()
 
 if __name__ == '__main__':
-    run_simulation()
+    r_values = np.round(np.geomspace(10, 10e3, 20), 2)
+    l_values = np.round(np.geomspace(1e-4, 1, 20), 6)
+    c_values = np.round(np.geomspace(1e-9, 1e-4, 10), 9)
+    vin_values = np.round(np.linspace(1, 24, 10), 2)
+    freq_values = np.round(np.geomspace(1, 10e6, 25), 2)
 
+    param_combinations = list(product(r_values, l_values, c_values, vin_values, freq_values))
 
+    print(f"Lancement de {len(param_combinations):,} simulations...")
+
+    result_queue = multiprocessing.Queue()
+    writer_process = multiprocessing.Process(
+        target=writer_worker, args=("rlc_ac.csv", result_queue)
+    )
+    writer_process.start()
+
+    with multiprocessing.Pool() as pool:
+        try:
+            for result in tqdm(
+                pool.imap_unordered(simulate_rlc_ac, param_combinations),
+                total=len(param_combinations),
+                desc="Progression"
+            ):
+                if result:
+                    result_queue.put(result)
+        finally:
+            result_queue.put('STOP')
+            writer_process.join()
+
+    print("Termin\u00e9 ! Fichier : rlc_ac_mil.csv")
