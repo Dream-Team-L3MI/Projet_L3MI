@@ -70,3 +70,4 @@ if __name__ == '__main__':
             writer.writerow(result)
 
     print(f"Simulations completed. Results saved to '{output_file}'.")
+ 

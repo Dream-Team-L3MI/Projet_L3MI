@@ -1,114 +1,144 @@
-import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import u_V, u_Ohm, u_Hz, u_H, u_F
-import numpy as np
-import cmath
 import csv
-from itertools import product
-import multiprocessing
+import numpy as np
+from multiprocessing import Pool
 from tqdm import tqdm
-import os
-import signal
-import sys
+import time
 
-# Configuration
-logger = Logging.setup_logging()
-os.environ['PYSPICE_SIMULATION_TEMP_DIR'] = os.path.join(os.getcwd(), 'tmp')
+# Fonction de simulation AC pour un circuit RC
 
-def signal_handler(sig, frame):
-    print("\nArr\u00eat propre en cours...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-
+# Fonction de simulation AC pour un circuit RLC
 def simulate_rlc_ac(params):
-    """Simulation d'un circuit RLC en r\u00e9gime AC"""
-    R, L, C, Vin, freq = params
+    R_value, L_value, C_value, Vin = params
+
     try:
-        circuit = Circuit('RLC Series Circuit')
-        circuit.SinusoidalVoltageSource(1, 'vin', circuit.gnd, amplitude=Vin, frequency=freq)
-        circuit.R(1, 'vin', 'n1', R @ u_Ohm)
-        circuit.L(1, 'n1', 'n2', L @ u_H)
-        circuit.C(1, 'n2', circuit.gnd, C @ u_F)
+        circuit = Circuit('RLC Circuit AC Analysis')
+
+        circuit.V('input', 'input', circuit.gnd, f'DC 0 AC {float(Vin)}')
+        circuit.R('R1', 'input', 'n1', R_value)
+        circuit.L('L1', 'n1', 'n2', L_value)
+        circuit.C('C1', 'n2', circuit.gnd, C_value)
 
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
-        analysis = simulator.ac(start_frequency=freq, stop_frequency=freq, number_of_points=1, variation='lin')
 
-        vin = complex(analysis['vin'][0])
-        vn1 = complex(analysis['n1'][0])
-        vn2 = complex(analysis['n2'][0])
+        analysis = simulator.ac(start_frequency=1,
+                                stop_frequency=1e6,
+                                number_of_points=100,
+                                variation='lin')
 
-        V_R = vin - vn1
-        V_L = vn1 - vn2
-        V_C = vn2
+        v_in = analysis['input']
+        v_out = analysis['n2']
+        v_r = analysis['input'] - analysis['n1']
+        v_l = analysis['n1'] - analysis['n2']
 
-        gain_bas = abs(V_C) / abs(vin)
-        gain_haut = abs(V_L) / abs(vin)
-        gain_bande = abs(V_R) / abs(vin)
+        frequencies = np.array([float(f) for f in analysis.frequency])
+        mag_out = np.abs(v_out)
+        mag_r = np.abs(v_r)
+        mag_l = np.abs(v_l)
 
-        return {
-            'R': float(R),
-            'L': float(L),
-            'C': float(C),
-            'V_in': float(Vin),
-            'Frequency_Hz': float(freq),
-            'V_R': float(abs(V_R)),
-            'V_L': float(abs(V_L)),
-            'V_C': float(abs(V_C)),
-            'gain_bas': float(gain_bas),
-            'gain_haut': float(gain_haut),
-            'gain_bande': float(gain_bande),
-            'phase_V_R_rad': float(cmath.phase(V_R)),
-            'phase_V_L_rad': float(cmath.phase(V_L)),
-            'phase_V_C_rad': float(cmath.phase(V_C))
-        }
-    except Exception:
-        return None
+        phase_out = np.angle(v_out, deg=True)
+        phase_r = np.angle(v_r, deg=True)
+        phase_l = np.angle(v_l, deg=True)
 
-def writer_worker(output_file, queue):
-    with open(output_file, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            'R', 'L', 'C', 'V_in', 'Frequency_Hz',
-            'V_R', 'V_L', 'V_C',
-            'gain_bas', 'gain_haut', 'gain_bande',
-            'phase_V_R_rad', 'phase_V_L_rad', 'phase_V_C_rad'
-        ])
-        writer.writeheader()
-        while True:
-            result = queue.get()
-            if result == 'STOP':
-                break
-            writer.writerow(result)
-            f.flush()
+        gain_basse = mag_out / np.abs(v_in)
+        gain_basse_db = 20 * np.log10(gain_basse)
+        gain_haute = mag_r / np.abs(v_in)
+        gain_haute_db = 20 * np.log10(gain_haute)
+        gain_bande = mag_out / np.abs(v_in)
+        gain_bande_db = 20 * np.log10(gain_bande)
+
+
+        results = []
+        for i, f in enumerate(frequencies):
+            results.append({
+                'R': R_value,
+                'L': L_value,
+                'C': C_value,
+                'Vin': Vin,
+                'Frequency': f,
+                'V_R': float(mag_r[i]),
+                'V_L': float(mag_l[i]),
+                'V_C': float(mag_out[i]),
+                'Phase_R': phase_r[i],
+                'Phase_L': phase_l[i],
+                'Phase_C': phase_out[i],
+                'Gain_basse': float(gain_basse[i]),
+                'Gain_basse_dB': gain_basse_db[i],
+                'Gain_haute': float(gain_haute[i]),
+                'Gain_haute_dB': gain_haute_db[i],
+                'Gain_bande': float(gain_bande[i]),
+                'Gain_bande_dB': gain_bande_db[i],
+            })
+
+        return results
+
+    except Exception as e:
+        print(f"Erreur pour (R={R_value}, L={L_value}, C={C_value}, Vin={Vin}): {e}")
+        return []
+
+
+
+# Génération des combinaisons paramétriques
+def generate_dataset(num_simulations):
+    r_values = np.logspace(3, 4, 10)
+    l_values = np.logspace(-6, -3, 10)  # 1µH à 1mH
+    c_values = np.logspace(-8, -6, 10)
+    vin_values = np.linspace(0.5, 2.0, 10)
+
+    full_grid = [(r, l, c, v) for r in r_values for l in l_values for c in c_values for v in vin_values]
+    return full_grid[:num_simulations]
+
+
+# Écriture progressive des résultats dans le fichier CSV
+def write_batch_to_csv(batch_results, writer):
+    for result in batch_results:
+        writer.writerows(result)  # Chaque "result" est une liste de 100 lignes
 
 if __name__ == '__main__':
-    r_values = np.round(np.geomspace(10, 10e3, 20), 2)
-    l_values = np.round(np.geomspace(1e-4, 1, 20), 6)
-    c_values = np.round(np.geomspace(1e-9, 1e-4, 10), 9)
-    vin_values = np.round(np.linspace(1, 24, 10), 2)
-    freq_values = np.round(np.geomspace(1, 10e6, 25), 2)
+    # Paramètres globaux
+    TOTAL_SIMULATIONS = 10000
+    BATCH_SIZE = 100
+    PROCESSES = 4  
 
-    param_combinations = list(product(r_values, l_values, c_values, vin_values, freq_values))
+    print(f"Lancement de {TOTAL_SIMULATIONS} simulations AC en batchs de {BATCH_SIZE}...")
 
-    print(f"Lancement de {len(param_combinations):,} simulations...")
+    # Création du dataset
+    dataset = generate_dataset(TOTAL_SIMULATIONS)
+    total_batches = TOTAL_SIMULATIONS // BATCH_SIZE
 
-    result_queue = multiprocessing.Queue()
-    writer_process = multiprocessing.Process(
-        target=writer_worker, args=("rlc_ac.csv", result_queue)
-    )
-    writer_process.start()
+    start = time.time()
 
-    with multiprocessing.Pool() as pool:
-        try:
-            for result in tqdm(
-                pool.imap_unordered(simulate_rlc_ac, param_combinations),
-                total=len(param_combinations),
-                desc="Progression"
-            ):
-                if result:
-                    result_queue.put(result)
-        finally:
-            result_queue.put('STOP')
-            writer_process.join()
+    # Sauvegarde des résultats dans un fichier CSV
+    with open('rc_ac_results.csv', 'w', newline='') as f:
+        #writer = csv.DictWriter(f, fieldnames=['R', 'C', 'Vin', 'Frequency', 'Magnitude', 'Phase'])
+        writer = csv.DictWriter(f, fieldnames=[
+            'R', 'L', 'C', 'Vin', 'Frequency',
+            'V_R', 'V_L', 'V_C',
+            'Phase_R', 'Phase_L', 'Phase_C',
+            'Gain_basse', 'Gain_basse_dB',
+            'Gain_haute', 'Gain_haute_dB', 'Gain_bande','Gain_bande_dB'
+])
 
-    print("Termin\u00e9 ! Fichier : rlc_ac_mil.csv")
+
+        writer.writeheader()
+
+        # Exécution batch par batch
+        for batch_index in tqdm(range(total_batches)):
+            batch = dataset[batch_index * BATCH_SIZE:(batch_index + 1) * BATCH_SIZE]
+
+            # Création d'une pool de processus pour le batch actuel
+            # l'utilisation de with va assurer la fermeture de notre pool après l'exécution 
+            # la méthode pool.map va assurer l'application de la ft de simulation sur chaque élément du param_grid 
+            # de façon parallèle (càd elle répartit les valeurs de la grille sur les différents ps de la pool )
+            # => Ce qui réduit le temps global nécessaire pour l'exécution
+            with Pool(processes=PROCESSES) as pool:
+                batch_results = pool.map(simulate_rlc_ac, batch)
+
+            # Écriture progressive dans le fichier CSV
+            write_batch_to_csv(batch_results, writer)
+
+    end = time.time()
+    print("Simulations AC terminées. Données sauvegardées dans rc_ac_results.csv")
+    print(f"Temps total d'exécution : {end - start:.2f} secondes")
+
+
