@@ -26,23 +26,56 @@ def simulate_rc_ac(params):
                                 stop_frequency=1e6,
                                 number_of_points=100,
                                 variation='dec')
+        
+
+        v_in = analysis[ 'input' ]
+        v_out = analysis[ 'output' ]
+        # Calcul de la tension aux bornes du condensateur
+        v_r = v_in - v_out
 
         # Extraction des données
-        frequencies = np.array([float(f) for f in analysis.frequency])
-        magnitudes = np.array([float(m) for m in abs(analysis['output'])])
-        phases = np.array([float(p) for p in np.angle(analysis['output'], deg=True)])
+        frequencies = np.array( [ float( f ) for f in analysis.frequency ] )
+        magnitudes = np.array( [ float( m ) for m in abs( analysis[ 'output' ] ) ] )
+        mag_r = np.abs( v_r)
+        mag_out = abs( analysis[ 'output' ] )
+        #mag_r = np.array( [ float( m ) for m in abs( analysis[ 'R' ] ) ] )
+        #mag_out = np.array( [ float( m ) for m in abs( analysis[ 'output' ] ) ] )
+
+        phases = np.array( [ float(p) for p in np.angle( analysis[ 'output' ] , deg = True ) ] )
+
+
+        #phases_r = np.array( [ float( p ) for p in np.angle( analysis[ 'R' ] , deg = True ) ] )
+        phases_r = np.angle( v_r, deg = True )
+        phases_out = np.array( [ float( p ) for p in np.angle( analysis[ 'output' ], deg = True ) ] )
+
+        # Calcul du gain basse
+        gain_basse = np.abs( v_out ) / np.abs( v_in )
+        gain_basse_db = 20 * np.log10( gain_basse )
+
+        # calcul du gain hautes
+        gain_haute = np.abs( v_r ) / np.abs( v_in )
+        gain_gain_haute_db = 20 * np.log10( gain_haute )
+
 
         # Création des résultats
         results = []
+        i = 0
         for f, mag, phase in zip(frequencies, magnitudes, phases):
             results.append({
                 'R': R_value,
                 'C': C_value,
                 'Vin': Vin,
                 'Frequency': f,
-                'Magnitude': mag,
-                'Phase': phase
+                'V_R': float( mag_r[ i ] ),
+                'V_C': float( mag_out[ i ] ) ,
+                'Phase_R': phases_r[ i ],
+                'Phase_C': phases_out[ i ],
+                'Gain_basse': float( gain_basse[ i ] ),
+                'Gain_basse_dB': gain_basse_db[ i ] ,
+                'Gain_haute': float( gain_haute[ i ] ),
+                'Gain_haute_dB': gain_gain_haute_db[ i ]
             })
+            i += 1
 
         return results
 
@@ -52,9 +85,9 @@ def simulate_rc_ac(params):
 
 # Génération des combinaisons paramétriques
 def generate_dataset(num_simulations):
-    r_values = np.logspace(3, 4, 100)          # 1kΩ à 10kΩ
-    c_values = np.logspace(-8, -6, 100)        # 10nF à 1µF
-    vin_values = np.linspace(0.5, 2.0, 100)    # 0.5V à 2V
+    r_values = np.logspace(3, 4, 5)          # 1kΩ à 10kΩ
+    c_values = np.logspace(-8, -6, 5)        # 10nF à 1µF
+    vin_values = np.linspace(0.5, 2.0, 5)    # 0.5V à 2V
 
     # Création du param_grid
     full_grid = [(r, c, v) for r in r_values for c in c_values for v in vin_values]
@@ -81,7 +114,15 @@ if __name__ == '__main__':
 
     # Sauvegarde des résultats dans un fichier CSV
     with open('rc_ac_results.csv', 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['R', 'C', 'Vin', 'Frequency', 'Magnitude', 'Phase'])
+        #writer = csv.DictWriter(f, fieldnames=['R', 'C', 'Vin', 'Frequency', 'Magnitude', 'Phase'])
+        writer = csv.DictWriter(f, fieldnames=[
+                                'R', 'C', 'Vin', 'Frequency',
+                                'V_R', 'V_C', 'Phase_R', 'Phase_C' , 
+                                'Gain_basse', 'Gain_basse_dB',
+                                'Gain_haute', 'Gain_haute_dB'
+
+        ])
+
         writer.writeheader()
 
         # Exécution batch par batch
