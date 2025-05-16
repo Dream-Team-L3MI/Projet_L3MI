@@ -85,9 +85,9 @@ def simulate_rc_ac(params):
 
 # Génération des combinaisons paramétriques
 def generate_dataset(num_simulations):
-    r_values = np.logspace(3, 4, 5)          # 1kΩ à 10kΩ
-    c_values = np.logspace(-8, -6, 5)        # 10nF à 1µF
-    vin_values = np.linspace(0.5, 2.0, 5)    # 0.5V à 2V
+    r_values = np.logspace(3, 4, 20)          # 1kΩ à 10kΩ
+    c_values = np.logspace(-8, -6, 25)        # 10nF à 1µF
+    vin_values = np.linspace(0.5, 2.0, 20)    # 0.5V à 2V
 
     # Création du param_grid
     full_grid = [(r, c, v) for r in r_values for c in c_values for v in vin_values]
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     start = time.time()
 
     # Sauvegarde des résultats dans un fichier CSV
-    with open('rc_ac_results.csv', 'w', newline='') as f:
+    with open('rc_ac_results_1M.csv', 'w', newline='') as f:
         #writer = csv.DictWriter(f, fieldnames=['R', 'C', 'Vin', 'Frequency', 'Magnitude', 'Phase'])
         writer = csv.DictWriter(f, fieldnames=[
                                 'R', 'C', 'Vin', 'Frequency',
