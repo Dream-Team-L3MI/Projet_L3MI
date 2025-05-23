@@ -85,9 +85,9 @@ def simulate_rc_ac(params):
 
 # Génération des combinaisons paramétriques
 def generate_dataset(num_simulations):
-    r_values = np.logspace(3, 4, 15)          # 1kΩ à 10kΩ
-    c_values = np.logspace(-8, -6, 15)        # 10nF à 1µF
-    vin_values = np.linspace(0.5, 2.0, 20)    # 0.5V à 2V
+    r_values = np.logspace(3, 4, 10)          # 1kΩ à 10kΩ
+    c_values = np.logspace(-8, -6, 10)        # 10nF à 1µF
+    vin_values = np.linspace(0.5, 2.0, 10)    # 0.5V à 2V
 
     # Création du param_grid
     full_grid = [(r, c, v) for r in r_values for c in c_values for v in vin_values]
